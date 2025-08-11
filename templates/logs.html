@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>감시 기록</title>
+</head>
+<body>
+    <h1>캠핑 예약 감시 기록</h1>
+    <a href="/">설정 페이지로 돌아가기</a>
+    <hr>
+    {% if logs %}
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>타임스탬프</th>
+                    <th>감시 날짜</th>
+                    <th>발견된 사이트</th>
+                    <th>상태</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.id }}</td>
+                    <td>{{ log.timestamp }}</td>
+                    <td>{{ log.monitored_dates }}</td>
+                    <td>{{ log.found_sites }}</td>
+                    <td>{{ log.status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>기록이 없습니다.</p>
+    {% endif %}
+</body>
+</html>
