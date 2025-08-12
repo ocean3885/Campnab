@@ -25,4 +25,4 @@ dist-ssr
 
 venv
 reload.sh
-*.db
+*.sqlite3

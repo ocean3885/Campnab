@@ -1,18 +1,28 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>캠핑 예약 감시 설정</title>
+    <title>예약 감시 설정</title>
 </head>
 <body>
-    <h1>캠핑 예약 감시 날짜 설정</h1>
+    <h1>예약 감시 설정</h1>
+    
+    <p>
+        <strong>현재 기준 실행 횟수:</strong> {{ execution_count }}회
+    </p>
+
+    <p>
+        <strong>현재 감시 날짜:</strong> {{ current_dates }}
+    </p>
+
+    {% if message %}
+    <p style="color: green;">{{ message }}</p>
+    {% endif %}
+
     <form action="/set-dates" method="post">
-        <label for="dates">감시할 날짜를 입력하세요 (쉼표로 구분):</label><br>
+        <h3>감시 날짜 변경</h3>
+        <label for="dates">새로운 감시 날짜 입력 (YYYYMMDD 형식, 쉼표로 구분):</label><br>
         <input type="text" id="dates" name="dates" placeholder="예: 20250815, 20250816"><br><br>
-        <button type="submit">날짜 설정</button>
+        <input type="submit" value="날짜 설정">
     </form>
-    <p>{{ message }}</p>
-    <a href="/camping/logs">로그 내역 확인</a>
 </body>
 </html>
