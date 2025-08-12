@@ -26,3 +26,7 @@ dist-ssr
 venv
 reload.sh
 *.sqlite3
+
+# Python cache files
+__pycache__/
+*.pyc
