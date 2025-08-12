@@ -186,4 +186,4 @@ async def toggle_monitoring():
         if MONITORING_TASK and not MONITORING_TASK.done():
             print("[INFO] 감시 중단을 요청했습니다. 다음 확인 주기 이후에 중단됩니다.")
 
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/camping/", status_code=303)
