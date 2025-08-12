@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import datetime
 import re
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import json
 from pathlib import Path
@@ -99,9 +99,8 @@ async def check_reservation_status():
         if found_sites:
             log_status = f"Alert: Available spots found for dates: {list(found_sites.keys())}"
             asyncio.create_task(send_sms_alert('성수산왕의숲-예약가능'))
-            current_interval = alert_interval
-        else:
-            current_interval = check_interval
+        
+        current_interval = check_interval
 
         print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] {log_status} Next check in {current_interval} seconds.")
         
@@ -137,6 +136,7 @@ async def read_root(request: Request):
             "request": request,
             "execution_count": EXECUTION_COUNT,
             "current_dates": current_dates,
+            "monitoring_active": MONITORING_ACTIVE,
             "message": ""
         }
     )
@@ -162,43 +162,28 @@ async def set_dates(request: Request, dates: str = Form(...)):
             "request": request,
             "execution_count": EXECUTION_COUNT,
             "current_dates": ", ".join(CHECK_DATES),
+            "monitoring_active": MONITORING_ACTIVE,
             "message": message
         }
     )
 
-@app.post("/stop", response_class=HTMLResponse)
-async def stop_monitoring(request: Request):
-    global MONITORING_ACTIVE
-    MONITORING_ACTIVE = False
-    save_config(CHECK_DATES, MONITORING_ACTIVE)
-    message = "감시가 중단되었습니다."
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "execution_count": EXECUTION_COUNT,
-            "current_dates": ", ".join(CHECK_DATES),
-            "message": message
-        }
-    )
+@app.get("/status")
+async def get_status():
+    return {"monitoring_active": MONITORING_ACTIVE}
 
-@app.post("/start", response_class=HTMLResponse)
-async def start_monitoring(request: Request):
+@app.post("/toggle")
+async def toggle_monitoring():
     global MONITORING_ACTIVE, MONITORING_TASK
-    if not MONITORING_ACTIVE:
-        MONITORING_ACTIVE = True
-        save_config(CHECK_DATES, MONITORING_ACTIVE)
-        MONITORING_TASK = asyncio.create_task(check_reservation_status())
-        message = "감시가 다시 시작되었습니다."
-    else:
-        message = "감시가 이미 실행 중입니다."
     
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "execution_count": EXECUTION_COUNT,
-            "current_dates": ", ".join(CHECK_DATES),
-            "message": message
-        }
-    )
+    MONITORING_ACTIVE = not MONITORING_ACTIVE
+    save_config(CHECK_DATES, MONITORING_ACTIVE)
+    
+    if MONITORING_ACTIVE:
+        print("[INFO] 감시가 시작되었습니다.")
+        if MONITORING_TASK is None or MONITORING_TASK.done():
+            MONITORING_TASK = asyncio.create_task(check_reservation_status())
+    else:
+        if MONITORING_TASK and not MONITORING_TASK.done():
+            print("[INFO] 감시 중단을 요청했습니다. 다음 확인 주기 이후에 중단됩니다.")
+
+    return RedirectResponse(url="/", status_code=303)
