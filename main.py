@@ -10,16 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
 from pathlib import Path
-from starlette.routing import Route
-from starlette.applications import Starlette
 
-app = Starlette(routes=[
-    Route("/", "homepage", methods=["GET"]),
-    Route("/set-dates", "set_dates", methods=["POST"]),
-])
-
-# 정적 파일 마운트
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 CONFIG_FILE = Path("config.json")
 
@@ -133,6 +124,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# 정적 파일 마운트
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- FastAPI 엔드포인트 ---
 @app.get("/", response_class=HTMLResponse, name="homepage")
