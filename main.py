@@ -191,3 +191,11 @@ async def toggle_monitoring(request: Request):
 # --- Include Router ---
 # 모든 라우터를 /camping 접두사 아래에 포함시킵니다.
 app.include_router(router, prefix="/camping")
+
+# --- Root Redirect for Convenience ---
+@app.get("/camping", include_in_schema=False)
+async def redirect_to_prefixed_root():
+    """
+    /camping 경로로 접속 시 /camping/로 리디렉션합니다.
+    """
+    return RedirectResponse(url="/camping/", status_code=301)
