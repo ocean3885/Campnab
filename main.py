@@ -4,7 +4,7 @@ import httpx
 from bs4 import BeautifulSoup
 import datetime
 import re
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -121,15 +121,18 @@ async def lifespan(app: FastAPI):
     yield
     print("Application is shutting down.")
 
-
-
-app = FastAPI(lifespan=lifespan, root_path="/camping")
+# --- App and Router Setup ---
+app = FastAPI(lifespan=lifespan)
+router = APIRouter()
 
 # 정적 파일 마운트
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# APIRouter를 사용할 때는 정적 파일 경로도 접두사를 포함하도록 명시적으로 마운트합니다.
+# 이렇게 하면 템플릿에서 url_for('static', path='...')를 사용할 때 올바른 경로가 생성됩니다.
+app.mount("/camping/static", StaticFiles(directory="static"), name="static")
 
-# --- FastAPI 엔드포인트 ---
-@app.get("/", response_class=HTMLResponse, name="homepage")
+
+# --- API Endpoints ---
+@router.get("/", response_class=HTMLResponse, name="homepage")
 async def read_root(request: Request):
     """
     루트 URL에 접속했을 때 현재 실행 횟수와 날짜 설정 페이지를 보여줍니다.
@@ -146,7 +149,7 @@ async def read_root(request: Request):
         }
     )
 
-@app.post("/set-dates", name="set_dates")
+@router.post("/set-dates", name="set_dates")
 async def set_dates(request: Request, dates: str = Form(...)):
     """
     POST 요청을 통해 새로운 감시 날짜를 설정합니다.
@@ -161,13 +164,14 @@ async def set_dates(request: Request, dates: str = Form(...)):
     else:
         message = "올바른 날짜를 입력해주세요."
     
+    # 303 See Other 리디렉션은 POST 요청 후에 GET으로 리디렉션하도록 브라우저에 지시합니다.
     return RedirectResponse(request.url_for("homepage"), status_code=303)
 
-@app.get("/status")
+@router.get("/status")
 async def get_status():
     return {"monitoring_active": MONITORING_ACTIVE}
 
-@app.post("/toggle", name="toggle_monitoring")
+@router.post("/toggle", name="toggle_monitoring")
 async def toggle_monitoring(request: Request):
     global MONITORING_ACTIVE, MONITORING_TASK
     
@@ -183,3 +187,7 @@ async def toggle_monitoring(request: Request):
             print("[INFO] 감시 중단을 요청했습니다. 다음 확인 주기 이후에 중단됩니다.")
 
     return RedirectResponse(request.url_for("homepage"), status_code=303)
+
+# --- Include Router ---
+# 모든 라우터를 /camping 접두사 아래에 포함시킵니다.
+app.include_router(router, prefix="/camping")
