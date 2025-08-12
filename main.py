@@ -7,16 +7,37 @@ import re
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+import json
+from pathlib import Path
+
+CONFIG_FILE = Path("config.json")
+
+def load_config():
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {
+        "dates": ["20250815", "20250816"],  # 기본 날짜
+        "monitoring_active": True           # 기본 감시 상태
+    }
+
+def save_config(dates, monitoring_active):
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump({
+            "dates": dates,
+            "monitoring_active": monitoring_active
+        }, f, ensure_ascii=False, indent=2)
 
 # --- 글로벌 설정 ---
 BASE_URL = "https://임실성수산왕의숲국민여가캠핑장.com/16/"
-CHECK_DATES = ["20250815", "20250816"]
+config = load_config()
+CHECK_DATES = config["dates"]
 send_url = 'https://apis.aligo.in/send/'
 
 # --- 실행 횟수 추적을 위한 전역 변수 ---
 EXECUTION_COUNT = 0
-MONITORING_ACTIVE = True  # True = 감시 실행, False = 중단
-MONITORING_TASK = None    # asyncio Task 객체 저장
+MONITORING_ACTIVE = config["monitoring_active"]
+MONITORING_TASK = None
 
 # --- 템플릿 설정 ---
 templates = Jinja2Templates(directory="templates")
@@ -90,11 +111,15 @@ async def check_reservation_status():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global MONITORING_TASK
-    print("Application started. Starting background check.")
-    MONITORING_TASK = asyncio.create_task(check_reservation_status())
+    global MONITORING_TASK, MONITORING_ACTIVE
+    print("Application started. Loading config...")
+    config = load_config()
+    MONITORING_ACTIVE = config["monitoring_active"]
+    if MONITORING_ACTIVE:
+        MONITORING_TASK = asyncio.create_task(check_reservation_status())
     yield
     print("Application is shutting down.")
+
 
 
 app = FastAPI(lifespan=lifespan)
@@ -126,6 +151,7 @@ async def set_dates(request: Request, dates: str = Form(...)):
     
     if new_dates:
         CHECK_DATES = new_dates
+        save_config(CHECK_DATES, MONITORING_ACTIVE)
         message = f"감시 날짜가 성공적으로 변경되었습니다. 새로운 날짜: {', '.join(CHECK_DATES)}"
     else:
         message = "올바른 날짜를 입력해주세요."
@@ -144,6 +170,7 @@ async def set_dates(request: Request, dates: str = Form(...)):
 async def stop_monitoring(request: Request):
     global MONITORING_ACTIVE
     MONITORING_ACTIVE = False
+    save_config(CHECK_DATES, MONITORING_ACTIVE)
     message = "감시가 중단되었습니다."
     return templates.TemplateResponse(
         "index.html",
@@ -160,6 +187,7 @@ async def start_monitoring(request: Request):
     global MONITORING_ACTIVE, MONITORING_TASK
     if not MONITORING_ACTIVE:
         MONITORING_ACTIVE = True
+        save_config(CHECK_DATES, MONITORING_ACTIVE)
         MONITORING_TASK = asyncio.create_task(check_reservation_status())
         message = "감시가 다시 시작되었습니다."
     else:

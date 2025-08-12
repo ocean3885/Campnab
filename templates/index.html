@@ -24,12 +24,14 @@
         <input type="text" id="dates" name="dates" placeholder="예: 20250815, 20250816"><br><br>
         <input type="submit" value="날짜 설정">
     </form>
-    <form action="/camping/stop" method="post" style="display:inline;">
-        <input type="submit" value="감시 중단">
-    </form>
-
-    <form action="/camping/start" method="post" style="display:inline;">
-        <input type="submit" value="감시 시작">
-    </form>
+    {% if monitoring_active %}
+        <form action="{{ request.url_for('stop_monitoring') }}" method="post" style="display:inline;">
+            <input type="submit" value="감시 중단">
+        </form>
+    {% else %}
+        <form action="{{ request.url_for('start_monitoring') }}" method="post" style="display:inline;">
+            <input type="submit" value="감시 시작">
+        </form>
+    {% endif %}
 </body>
 </html>
