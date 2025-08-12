@@ -6,9 +6,20 @@ import datetime
 import re
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import json
 from pathlib import Path
+from starlette.routing import Route
+from starlette.applications import Starlette
+
+app = Starlette(routes=[
+    Route("/", "homepage", methods=["GET"]),
+    Route("/set-dates", "set_dates", methods=["POST"]),
+])
+
+# 정적 파일 마운트
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 CONFIG_FILE = Path("config.json")
 
@@ -124,7 +135,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # --- FastAPI 엔드포인트 ---
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, name="homepage")
 async def read_root(request: Request):
     """
     루트 URL에 접속했을 때 현재 실행 횟수와 날짜 설정 페이지를 보여줍니다.
@@ -141,7 +152,7 @@ async def read_root(request: Request):
         }
     )
 
-@app.post("/set-dates", response_class=HTMLResponse)
+@app.post("/set-dates")
 async def set_dates(request: Request, dates: str = Form(...)):
     """
     POST 요청을 통해 새로운 감시 날짜를 설정합니다.
@@ -156,23 +167,14 @@ async def set_dates(request: Request, dates: str = Form(...)):
     else:
         message = "올바른 날짜를 입력해주세요."
     
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "execution_count": EXECUTION_COUNT,
-            "current_dates": ", ".join(CHECK_DATES),
-            "monitoring_active": MONITORING_ACTIVE,
-            "message": message
-        }
-    )
+    return RedirectResponse(request.url_for("homepage"), status_code=303)
 
 @app.get("/status")
 async def get_status():
     return {"monitoring_active": MONITORING_ACTIVE}
 
 @app.post("/toggle")
-async def toggle_monitoring():
+async def toggle_monitoring(request: Request):
     global MONITORING_ACTIVE, MONITORING_TASK
     
     MONITORING_ACTIVE = not MONITORING_ACTIVE
@@ -186,4 +188,4 @@ async def toggle_monitoring():
         if MONITORING_TASK and not MONITORING_TASK.done():
             print("[INFO] 감시 중단을 요청했습니다. 다음 확인 주기 이후에 중단됩니다.")
 
-    return RedirectResponse(url="/camping/", status_code=303)
+    return RedirectResponse(request.url_for("homepage"), status_code=303)
