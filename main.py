@@ -18,8 +18,8 @@ def load_config():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {
-        "dates": ["20250815", "20250816"],  # 기본 날짜
-        "monitoring_active": True           # 기본 감시 상태
+        "dates": ["20250815", "20250816"],
+        "monitoring_active": True
     }
 
 def save_config(dates, monitoring_active):
@@ -118,12 +118,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 router = APIRouter()
 
-# 정적 파일 마운트
+# 정적 파일 마운트 (camping 프리픽스 하에 static 제공)
 app.mount("/camping/static", StaticFiles(directory="static"), name="static")
 
-# --- API Endpoints ---
-@router.get("/", response_class=HTMLResponse, name="homepage")
-async def read_root(request: Request):
+# 헬퍼: 홈 페이지 렌더링 (중복 방지)
+async def render_homepage(request: Request, message: str = ""):
     current_dates = ", ".join(CHECK_DATES)
     return templates.TemplateResponse(
         "index.html",
@@ -132,9 +131,14 @@ async def read_root(request: Request):
             "execution_count": EXECUTION_COUNT,
             "current_dates": current_dates,
             "monitoring_active": MONITORING_ACTIVE,
-            "message": ""
+            "message": message
         }
     )
+
+# --- API Endpoints (router under /camping/) ---
+@router.get("/", response_class=HTMLResponse, name="homepage")
+async def read_root(request: Request):
+    return await render_homepage(request)
 
 @router.post("/set-dates", name="set_dates")
 async def set_dates(request: Request, dates: str = Form(...)):
@@ -171,20 +175,10 @@ async def toggle_monitoring(request: Request):
 
     return RedirectResponse(request.url_for("homepage"), status_code=303)
 
-# --- Include Router ---
+# --- Include Router under /camping ---
 app.include_router(router, prefix="/camping")
 
-# --- Root Redirects ---
-@app.get("/", include_in_schema=False)
-async def root_redirect():
-    """
-    루트 경로 접속 시 /camping/로 리다이렉트합니다.
-    """
-    return RedirectResponse(url="/camping/", status_code=302)
-
-@app.get("/camping", include_in_schema=False)
-async def redirect_to_prefixed_root():
-    """
-    /camping 경로로 접속 시 /camping/로 리디렉션합니다.
-    """
-    return RedirectResponse(url="/camping/", status_code=301)
+# --- Root route: 직접 페이지 제공하여 리다이렉트 루프 방지 ---
+@app.get("/", response_class=HTMLResponse)
+async def root_alias(request: Request):
+    return await render_homepage(request)
