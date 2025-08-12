@@ -123,7 +123,7 @@ async def lifespan(app: FastAPI):
 
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, root_path="/camping")
 
 # 정적 파일 마운트
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -146,7 +146,7 @@ async def read_root(request: Request):
         }
     )
 
-@app.post("/set-dates")
+@app.post("/set-dates", name="set_dates")
 async def set_dates(request: Request, dates: str = Form(...)):
     """
     POST 요청을 통해 새로운 감시 날짜를 설정합니다.
@@ -167,7 +167,7 @@ async def set_dates(request: Request, dates: str = Form(...)):
 async def get_status():
     return {"monitoring_active": MONITORING_ACTIVE}
 
-@app.post("/toggle")
+@app.post("/toggle", name="toggle_monitoring")
 async def toggle_monitoring(request: Request):
     global MONITORING_ACTIVE, MONITORING_TASK
     

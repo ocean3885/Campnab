@@ -4,7 +4,7 @@
     <title>예약 감시 설정</title>
 </head>
 <body>
-    <a href="/"><h1>예약 감시 설정</h1></a>
+    <a href="{{ url_for('homepage') }}"><h1>예약 감시 설정</h1></a>
     
     <p>
         <strong>현재 기준 실행 횟수:</strong> {{ execution_count }}회
@@ -18,14 +18,14 @@
     <p style="color: green;">{{ message }}</p>
     {% endif %}
 
-    <form action="set-dates" method="post">
+    <form action="{{ url_for('set_dates') }}" method="post">
         <h3>감시 날짜 변경</h3>
         <label for="dates">새로운 감시 날짜 입력 (YYYYMMDD 형식, 쉼표로 구분):</label><br>
         <input type="text" id="dates" name="dates" value="{{ current_dates }}" size="30"><br><br>
         <input type="submit" value="날짜 설정">
     </form>
 
-    <form action="toggle" method="post" style="margin-top: 20px;">
+    <form action="{{ url_for('toggle_monitoring') }}" method="post" style="margin-top: 20px;">
         <button type="submit">
             {% if monitoring_active %}
                 감시 중단
