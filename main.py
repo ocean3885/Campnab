@@ -110,7 +110,7 @@ async def read_root(request: Request):
         }
     )
 
-@app.post("/camping/set-dates", response_class=HTMLResponse)
+@app.post("/set-dates", response_class=HTMLResponse)
 async def set_dates(request: Request, dates: str = Form(...)):
     """
     POST 요청을 통해 새로운 감시 날짜를 설정합니다.
