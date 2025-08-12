@@ -31,3 +31,5 @@ reload.sh
 __pycache__/
 __pycache__
 *.pyc
+
+config.json
