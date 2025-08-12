@@ -4,7 +4,7 @@
     <title>예약 감시 설정</title>
 </head>
 <body>
-    <h1>예약 감시 설정</h1>
+    <a href="/camping"><h1>예약 감시 설정</h1></a>
     
     <p>
         <strong>현재 기준 실행 횟수:</strong> {{ execution_count }}회
@@ -23,6 +23,13 @@
         <label for="dates">새로운 감시 날짜 입력 (YYYYMMDD 형식, 쉼표로 구분):</label><br>
         <input type="text" id="dates" name="dates" placeholder="예: 20250815, 20250816"><br><br>
         <input type="submit" value="날짜 설정">
+    </form>
+    <form action="/camping/stop" method="post" style="display:inline;">
+        <input type="submit" value="감시 중단">
+    </form>
+
+    <form action="/camping/start" method="post" style="display:inline;">
+        <input type="submit" value="감시 시작">
     </form>
 </body>
 </html>

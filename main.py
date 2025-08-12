@@ -15,6 +15,8 @@ send_url = 'https://apis.aligo.in/send/'
 
 # --- 실행 횟수 추적을 위한 전역 변수 ---
 EXECUTION_COUNT = 0
+MONITORING_ACTIVE = True  # True = 감시 실행, False = 중단
+MONITORING_TASK = None    # asyncio Task 객체 저장
 
 # --- 템플릿 설정 ---
 templates = Jinja2Templates(directory="templates")
@@ -38,11 +40,11 @@ async def send_sms_alert(message: str):
             print(f"[SMS ERROR] SMS 전송 실패: {e}")
 
 async def check_reservation_status():
-    global CHECK_DATES, EXECUTION_COUNT
+    global CHECK_DATES, EXECUTION_COUNT, MONITORING_ACTIVE
     check_interval = 120
     alert_interval = 3600
 
-    while True:
+    while MONITORING_ACTIVE:        
         start_time = datetime.datetime.now()
         EXECUTION_COUNT += 1  # 실행 횟수 증가
         found_sites = {}
@@ -83,13 +85,17 @@ async def check_reservation_status():
         print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] {log_status} Next check in {current_interval} seconds.")
         
         await asyncio.sleep(current_interval)
+        
+    print("[INFO] 감시 루프가 종료되었습니다.")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global MONITORING_TASK
     print("Application started. Starting background check.")
-    asyncio.create_task(check_reservation_status())
+    MONITORING_TASK = asyncio.create_task(check_reservation_status())
     yield
     print("Application is shutting down.")
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -123,6 +129,41 @@ async def set_dates(request: Request, dates: str = Form(...)):
         message = f"감시 날짜가 성공적으로 변경되었습니다. 새로운 날짜: {', '.join(CHECK_DATES)}"
     else:
         message = "올바른 날짜를 입력해주세요."
+    
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "execution_count": EXECUTION_COUNT,
+            "current_dates": ", ".join(CHECK_DATES),
+            "message": message
+        }
+    )
+
+@app.post("/stop", response_class=HTMLResponse)
+async def stop_monitoring(request: Request):
+    global MONITORING_ACTIVE
+    MONITORING_ACTIVE = False
+    message = "감시가 중단되었습니다."
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "execution_count": EXECUTION_COUNT,
+            "current_dates": ", ".join(CHECK_DATES),
+            "message": message
+        }
+    )
+
+@app.post("/start", response_class=HTMLResponse)
+async def start_monitoring(request: Request):
+    global MONITORING_ACTIVE, MONITORING_TASK
+    if not MONITORING_ACTIVE:
+        MONITORING_ACTIVE = True
+        MONITORING_TASK = asyncio.create_task(check_reservation_status())
+        message = "감시가 다시 시작되었습니다."
+    else:
+        message = "감시가 이미 실행 중입니다."
     
     return templates.TemplateResponse(
         "index.html",
