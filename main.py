@@ -11,7 +11,6 @@ from fastapi.templating import Jinja2Templates
 import json
 from pathlib import Path
 
-
 CONFIG_FILE = Path("config.json")
 
 def load_config():
@@ -36,16 +35,15 @@ config = load_config()
 CHECK_DATES = config["dates"]
 send_url = 'https://apis.aligo.in/send/'
 
-# --- 실행 횟수 추적을 위한 전역 변수 ---
+# --- 실행 횟수 추적 ---
 EXECUTION_COUNT = 0
 MONITORING_ACTIVE = config["monitoring_active"]
 MONITORING_TASK = None
 
-# --- 템플릿 설정 ---
+# --- 템플릿 ---
 templates = Jinja2Templates(directory="templates")
 
 async def send_sms_alert(message: str):
-    # (기존 코드와 동일)
     sms_data = {
         'key': 'mbam9e8v586xu9vugol89i2wxvihrv9l',
         'userid': 'ocean3885',
@@ -53,7 +51,6 @@ async def send_sms_alert(message: str):
         'receiver': '01022324548',
         'msg': message
     }
-    
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             response = await client.post(send_url, data=sms_data)
@@ -65,14 +62,13 @@ async def send_sms_alert(message: str):
 async def check_reservation_status():
     global CHECK_DATES, EXECUTION_COUNT, MONITORING_ACTIVE
     check_interval = 120
-    alert_interval = 3600
 
-    while MONITORING_ACTIVE:        
+    while MONITORING_ACTIVE:
         start_time = datetime.datetime.now()
-        EXECUTION_COUNT += 1  # 실행 횟수 증가
+        EXECUTION_COUNT += 1
         found_sites = {}
         log_status = "No available spots."
-        
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(BASE_URL)
@@ -101,12 +97,9 @@ async def check_reservation_status():
         if found_sites:
             log_status = f"Alert: Available spots found for dates: {list(found_sites.keys())}"
             asyncio.create_task(send_sms_alert('성수산왕의숲-예약가능'))
-        
-        current_interval = check_interval
 
-        print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] {log_status} Next check in {current_interval} seconds.")
-        
-        await asyncio.sleep(current_interval)
+        print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] {log_status} Next check in {check_interval} seconds.")
+        await asyncio.sleep(check_interval)
         
     print("[INFO] 감시 루프가 종료되었습니다.")
 
@@ -126,17 +119,11 @@ app = FastAPI(lifespan=lifespan)
 router = APIRouter()
 
 # 정적 파일 마운트
-# APIRouter를 사용할 때는 정적 파일 경로도 접두사를 포함하도록 명시적으로 마운트합니다.
-# 이렇게 하면 템플릿에서 url_for('static', path='...')를 사용할 때 올바른 경로가 생성됩니다.
 app.mount("/camping/static", StaticFiles(directory="static"), name="static")
-
 
 # --- API Endpoints ---
 @router.get("/", response_class=HTMLResponse, name="homepage")
 async def read_root(request: Request):
-    """
-    루트 URL에 접속했을 때 현재 실행 횟수와 날짜 설정 페이지를 보여줍니다.
-    """
     current_dates = ", ".join(CHECK_DATES)
     return templates.TemplateResponse(
         "index.html",
@@ -151,9 +138,6 @@ async def read_root(request: Request):
 
 @router.post("/set-dates", name="set_dates")
 async def set_dates(request: Request, dates: str = Form(...)):
-    """
-    POST 요청을 통해 새로운 감시 날짜를 설정합니다.
-    """
     global CHECK_DATES
     new_dates = [d.strip() for d in dates.split(',') if d.strip()]
     
@@ -164,7 +148,6 @@ async def set_dates(request: Request, dates: str = Form(...)):
     else:
         message = "올바른 날짜를 입력해주세요."
     
-    # 303 See Other 리디렉션은 POST 요청 후에 GET으로 리디렉션하도록 브라우저에 지시합니다.
     return RedirectResponse(request.url_for("homepage"), status_code=303)
 
 @router.get("/status")
@@ -189,10 +172,16 @@ async def toggle_monitoring(request: Request):
     return RedirectResponse(request.url_for("homepage"), status_code=303)
 
 # --- Include Router ---
-# 모든 라우터를 /camping 접두사 아래에 포함시킵니다.
 app.include_router(router, prefix="/camping")
 
-# --- Root Redirect for Convenience ---
+# --- Root Redirects ---
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    """
+    루트 경로 접속 시 /camping/로 리다이렉트합니다.
+    """
+    return RedirectResponse(url="/camping/", status_code=302)
+
 @app.get("/camping", include_in_schema=False)
 async def redirect_to_prefixed_root():
     """
