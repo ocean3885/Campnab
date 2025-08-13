@@ -1,6 +1,11 @@
 {
-  "dates": [
-    "20250814"
-  ],
-  "monitoring_active": false
+  "sites": {
+    "imsil_forest": {
+      "display_name": "임실성수산왕의숲",
+      "dates": [
+        "20250817"
+      ],
+      "monitoring_active": true
+    }
+  }
 }

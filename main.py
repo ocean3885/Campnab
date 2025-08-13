@@ -1,206 +1,115 @@
 import asyncio
 from contextlib import asynccontextmanager
-import httpx
-from bs4 import BeautifulSoup
-import datetime
-import re
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-import json
-from pathlib import Path
+from starlette.middleware.sessions import SessionMiddleware
+import os
+from typing import Dict, Any
 
-CONFIG_FILE = Path("config.json")
+from core.config import load_app_config, save_app_config
+from sites.imsil_forest import monitor_site as monitor_imsil_forest
 
-def load_config():
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {
-        "dates": ["20250815", "20250816"],
-        "monitoring_active": True
-    }
+# --- 전역 변수 및 설정 ---
+app_config: Dict[str, Any] = load_app_config()
+monitoring_tasks: Dict[str, asyncio.Task] = {}
+monitoring_status: Dict[str, bool] = {
+    site_id: config.get("monitoring_active", False)
+    for site_id, config in app_config.get("sites", {}).items()
+}
 
-def save_config(dates, monitoring_active):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump({
-            "dates": dates,
-            "monitoring_active": monitoring_active
-        }, f, ensure_ascii=False, indent=2)
-
-# --- 글로벌 설정 ---
-BASE_URL = "https://임실성수산왕의숲국민여가캠핑장.com/16/"
-config = load_config()
-CHECK_DATES = config["dates"]
-send_url = 'https://apis.aligo.in/send/'
-
-# --- 실행 횟수 추적을 위한 전역 변수 ---
-EXECUTION_COUNT = 0
-MONITORING_ACTIVE = config["monitoring_active"]
-MONITORING_TASK = None
-
-# --- 템플릿 설정 ---
+# --- 템플릿 및 플래시 메시지 설정 ---
 templates = Jinja2Templates(directory="templates")
 
-async def send_sms_alert(message: str):
-    # (기존 코드와 동일)
-    sms_data = {
-        'key': 'mbam9e8v586xu9vugol89i2wxvihrv9l',
-        'userid': 'ocean3885',
-        'sender': '01022324548',
-        'receiver': '01022324548',
-        'msg': message
-    }
-    
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            response = await client.post(send_url, data=sms_data)
-            response.raise_for_status()
-            print("SMS 전송 결과:", response.json())
-        except httpx.HTTPError as e:
-            print(f"[SMS ERROR] SMS 전송 실패: {e}")
+def flash(request: Request, message: str):
+    request.session.setdefault("_flash", []).append(message)
 
-async def check_reservation_status():
-    global CHECK_DATES, EXECUTION_COUNT, MONITORING_ACTIVE
-    check_interval = 120
-    alert_interval = 3600
+def get_flashed_messages(request: Request):
+    return request.session.pop("_flash", [])
 
-    while MONITORING_ACTIVE:
-        start_time = datetime.datetime.now()
-        EXECUTION_COUNT += 1
-        found_sites = {}
-        log_status = "No available spots."
+# --- 모니터링 작업 관리 ---
+async def start_monitoring_for_site(site_id: str):
+    if site_id not in monitoring_tasks or monitoring_tasks[site_id].done():
+        site_config = app_config["sites"][site_id]
         
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(BASE_URL)
-                response.raise_for_status()
-                soup = BeautifulSoup(response.text, 'html.parser')
-
-                for check_date in CHECK_DATES:
-                    available_site_ids = []
-                    target_links = soup.find_all('a', href=lambda href: href and check_date in href)
-                    
-                    for a_tag in target_links:
-                        booking_badge_span = a_tag.find('span', class_='booking_badge')
-                        if booking_badge_span and booking_badge_span.text == '가':
-                            href = a_tag['href']
-                            match = re.search(r'idx=(\d+)', href)
-                            if match:
-                                available_site_ids.append(int(match.group(1)))
-                    
-                    if available_site_ids:
-                        found_sites[check_date] = sorted(available_site_ids)
-            
-        except Exception as e:
-            log_status = f"Error during check: {e}"
-            print(f"[ERROR] {log_status}")
+        # 각 사이트에 맞는 모니터링 함수를 동적으로 선택
+        monitor_function = None
+        if site_id == "imsil_forest":
+            monitor_function = monitor_imsil_forest
         
-        if found_sites:
-            log_status = f"Alert: Available spots found for dates: {list(found_sites.keys())}"
-            asyncio.create_task(send_sms_alert('성수산왕의숲-예약가능'))
-            current_interval = alert_interval
-        else:
-            current_interval = check_interval
+        if monitor_function:
+            monitoring_status[site_id] = True
+            task = asyncio.create_task(monitor_function(site_id, site_config, monitoring_status))
+            monitoring_tasks[site_id] = task
+            print(f"[INFO] {site_id} 모니터링 작업을 시작합니다.")
 
-        print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] {log_status} Next check in {current_interval} seconds.")
-        
-        await asyncio.sleep(current_interval)
-        
-    print("[INFO] 감시 루프가 종료되었습니다.")
+def stop_monitoring_for_site(site_id: str):
+    if site_id in monitoring_tasks and not monitoring_tasks[site_id].done():
+        monitoring_status[site_id] = False
+        monitoring_tasks[site_id].cancel()
+        print(f"[INFO] {site_id} 모니터링 작업을 중단합니다.")
 
+# --- 애플리케이션 수명 주기 (Lifespan) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global MONITORING_TASK, MONITORING_ACTIVE
-    print("Application started. Loading config...")
-    config = load_config()
-    MONITORING_ACTIVE = config["monitoring_active"]
-    if MONITORING_ACTIVE:
-        MONITORING_TASK = asyncio.create_task(check_reservation_status())
+    print("애플리케이션 시작...")
+    for site_id, config in app_config.get("sites", {}).items():
+        if config.get("monitoring_active", False):
+            await start_monitoring_for_site(site_id)
     yield
-    print("Application is shutting down.")
+    print("애플리케이션 종료...")
+    for task in monitoring_tasks.values():
+        if not task.done():
+            task.cancel()
 
+# --- FastAPI 앱 초기화 ---
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=os.urandom(24).hex())
 
 # --- FastAPI 엔드포인트 ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    current_dates = ", ".join(CHECK_DATES)
+    messages = get_flashed_messages(request)
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "execution_count": EXECUTION_COUNT,
-            "current_dates": current_dates,
-            "message": "",
-            "monitoring_active": MONITORING_ACTIVE
+            "sites": app_config.get("sites", {}),
+            "messages": messages
         }
     )
 
-@app.post("/set-dates", response_class=HTMLResponse)
-async def set_dates(request: Request, dates: str = Form(...)):
-    global CHECK_DATES, MONITORING_ACTIVE
-    new_dates = [d.strip() for d in dates.split(',') if d.strip()]
-    
-    if new_dates:
-        CHECK_DATES = new_dates
-        save_config(CHECK_DATES, MONITORING_ACTIVE)
-        message = f"감시 날짜가 성공적으로 변경되었습니다. 새로운 날짜: {', '.join(CHECK_DATES)}"
-    else:
-        message = "올바른 날짜를 입력해주세요."
-    
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "execution_count": EXECUTION_COUNT,
-            "current_dates": ", ".join(CHECK_DATES),
-            "message": message,
-            "monitoring_active": MONITORING_ACTIVE
-        }
-    )
+@app.post("/update-site", response_class=RedirectResponse)
+async def update_site(
+    request: Request,
+    site_id: str = Form(...),
+    dates: str = Form(...),
+    action: str = Form(...)
+):
+    site_config = app_config["sites"].get(site_id)
+    if not site_config:
+        flash(request, "존재하지 않는 사이트입니다.")
+        return RedirectResponse(url="/", status_code=303)
 
-@app.post("/stop", response_class=HTMLResponse)
-async def stop_monitoring(request: Request):
-    global MONITORING_ACTIVE, MONITORING_TASK
-    if MONITORING_ACTIVE:
-        MONITORING_ACTIVE = False
-        if MONITORING_TASK:
-            MONITORING_TASK.cancel()
-        save_config(CHECK_DATES, MONITORING_ACTIVE)
-        message = "감시가 중단되었습니다."
-    else:
-        message = "감시가 이미 중단된 상태입니다."
-    
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "execution_count": EXECUTION_COUNT,
-            "current_dates": ", ".join(CHECK_DATES),
-            "message": message,
-            "monitoring_active": MONITORING_ACTIVE
-        }
-    )
+    if action == "save_dates":
+        new_dates = [d.strip() for d in dates.split(',') if d.strip()]
+        if new_dates:
+            site_config["dates"] = new_dates
+            save_app_config(app_config)
+            flash(request, f"[{site_config['display_name']}] 감시 날짜가 변경되었습니다.")
+        else:
+            flash(request, "올바른 날짜를 입력해주세요.")
 
-@app.post("/start", response_class=HTMLResponse)
-async def start_monitoring(request: Request):
-    global MONITORING_ACTIVE, MONITORING_TASK
-    if not MONITORING_ACTIVE:
-        MONITORING_ACTIVE = True
-        save_config(CHECK_DATES, MONITORING_ACTIVE)
-        MONITORING_TASK = asyncio.create_task(check_reservation_status())
-        message = "감시가 다시 시작되었습니다."
-    else:
-        message = "감시가 이미 실행 중입니다."
-    
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "execution_count": EXECUTION_COUNT,
-            "current_dates": ", ".join(CHECK_DATES),
-            "message": message,
-            "monitoring_active": MONITORING_ACTIVE
-        }
-    )
+    elif action == "start":
+        site_config["monitoring_active"] = True
+        save_app_config(app_config)
+        await start_monitoring_for_site(site_id)
+        flash(request, f"[{site_config['display_name']}] 감시를 시작합니다.")
+
+    elif action == "stop":
+        site_config["monitoring_active"] = False
+        save_app_config(app_config)
+        stop_monitoring_for_site(site_id)
+        flash(request, f"[{site_config['display_name']}] 감시가 중단되었습니다.")
+
+    return RedirectResponse(url="/", status_code=303)

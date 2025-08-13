@@ -1,41 +1,58 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>예약 감시 설정</title>
+    <title>캠핑장 예약 감시</title>
+    <style>
+        body { font-family: sans-serif; }
+        .site-card { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        .site-title { font-size: 1.5em; margin-bottom: 10px; }
+        .status-active { color: green; }
+        .status-inactive { color: red; }
+        .message { color: blue; margin-bottom: 15px; }
+    </style>
 </head>
 <body>
-    <a href="/"><h1>예약 감시 설정</h1></a>
-    
-    <p>
-        <strong>현재 기준 실행 횟수:</strong> {{ execution_count }}회
-    </p>
+    <h1>캠핑장 예약 감시</h1>
 
-    <p>
-        <strong>현재 감시 날짜:</strong> {{ current_dates }}
-    </p>
-
-    {% if message %}
-    <p style="color: green;">{{ message }}</p>
+    {% if messages %}
+        {% for message in messages %}
+        <p class="message">{{ message }}</p>
+        {% endfor %}
     {% endif %}
 
-    <form action="/set-dates" method="post">
-        <h3>감시 날짜 변경</h3>
-        <label for="dates">새로운 감시 날짜 입력 (YYYYMMDD 형식, 쉼표로 구분):</label><br>
-        <input type="text" id="dates" name="dates" placeholder="예: 20250815, 20250816"><br><br>
-        <input type="submit" value="날짜 설정">
-    </form>
-    
-    <div style="margin-top: 20px;">
-    {% if monitoring_active %}
-        <button disabled style="background-color: #f0f0f0; cursor: not-allowed;">감시 중</button>
-        <form action="/stop" method="post" style="display:inline;">
-            <input type="submit" value="감시 중단">
+    {% for site_id, site in sites.items() %}
+    <div class="site-card">
+        <h2 class="site-title">{{ site.display_name }}</h2>
+        <p>
+            <strong>상태:</strong>
+            {% if site.monitoring_active %}
+                <span class="status-active">감시 중</span>
+            {% else %}
+                <span class="status-inactive">중단됨</span>
+            {% endif %}
+        </p>
+        <p>
+            <strong>현재 감시 날짜:</strong> {{ site.dates | join(', ') }}
+        </p>
+
+        <form action="/update-site" method="post">
+            <input type="hidden" name="site_id" value="{{ site_id }}">
+            
+            <div>
+                <label for="dates-{{ site_id }}">감시 날짜 변경 (YYYYMMDD, 쉼표로 구분):</label><br>
+                <input type="text" id="dates-{{ site_id }}" name="dates" value="{{ site.dates | join(', ') }}" size="30">
+                <button type="submit" name="action" value="save_dates">날짜 저장</button>
+            </div>
+            
+            <div style="margin-top: 10px;">
+                {% if site.monitoring_active %}
+                    <button type="submit" name="action" value="stop">감시 중단</button>
+                {% else %}
+                    <button type="submit" name="action" value="start">감시 시작</button>
+                {% endif %}
+            </div>
         </form>
-    {% else %}
-        <form action="/start" method="post" style="display:inline;">
-            <input type="submit" value="감시 시작">
-        </form>
-    {% endif %}
     </div>
+    {% endfor %}
 </body>
 </html>
