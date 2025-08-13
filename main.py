@@ -4,9 +4,8 @@ import httpx
 from bs4 import BeautifulSoup
 import datetime
 import re
-from fastapi import FastAPI, Request, Form, APIRouter
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import json
 from pathlib import Path
@@ -18,13 +17,8 @@ def load_config():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {
-<<<<<<< HEAD
         "dates": ["20250815", "20250816"],  # 기본 날짜
         "monitoring_active": True            # 기본 감시 상태
-=======
-        "dates": ["20250815", "20250816"],
-        "monitoring_active": True
->>>>>>> 8cef732dcc989a6d3db05a4dfd225032f6442934
     }
 
 def save_config(dates, monitoring_active):
@@ -40,15 +34,16 @@ config = load_config()
 CHECK_DATES = config["dates"]
 send_url = 'https://apis.aligo.in/send/'
 
-# --- 실행 횟수 추적 ---
+# --- 실행 횟수 추적을 위한 전역 변수 ---
 EXECUTION_COUNT = 0
 MONITORING_ACTIVE = config["monitoring_active"]
 MONITORING_TASK = None
 
-# --- 템플릿 ---
+# --- 템플릿 설정 ---
 templates = Jinja2Templates(directory="templates")
 
 async def send_sms_alert(message: str):
+    # (기존 코드와 동일)
     sms_data = {
         'key': 'mbam9e8v586xu9vugol89i2wxvihrv9l',
         'userid': 'ocean3885',
@@ -56,6 +51,7 @@ async def send_sms_alert(message: str):
         'receiver': '01022324548',
         'msg': message
     }
+    
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             response = await client.post(send_url, data=sms_data)
@@ -67,13 +63,14 @@ async def send_sms_alert(message: str):
 async def check_reservation_status():
     global CHECK_DATES, EXECUTION_COUNT, MONITORING_ACTIVE
     check_interval = 120
+    alert_interval = 3600
 
     while MONITORING_ACTIVE:
         start_time = datetime.datetime.now()
-        EXECUTION_COUNT += 1
+        EXECUTION_COUNT += 1  # 실행 횟수 증가
         found_sites = {}
         log_status = "No available spots."
-
+        
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(BASE_URL)
@@ -102,9 +99,13 @@ async def check_reservation_status():
         if found_sites:
             log_status = f"Alert: Available spots found for dates: {list(found_sites.keys())}"
             asyncio.create_task(send_sms_alert('성수산왕의숲-예약가능'))
+            current_interval = alert_interval
+        else:
+            current_interval = check_interval
 
-        print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] {log_status} Next check in {check_interval} seconds.")
-        await asyncio.sleep(check_interval)
+        print(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] {log_status} Next check in {current_interval} seconds.")
+        
+        await asyncio.sleep(current_interval)
         
     print("[INFO] 감시 루프가 종료되었습니다.")
 
@@ -119,18 +120,14 @@ async def lifespan(app: FastAPI):
     yield
     print("Application is shutting down.")
 
-<<<<<<< HEAD
-=======
-# --- App and Router Setup ---
->>>>>>> 8cef732dcc989a6d3db05a4dfd225032f6442934
 app = FastAPI(lifespan=lifespan)
-router = APIRouter()
 
-# 정적 파일 마운트 (camping 프리픽스 하에 static 제공)
-app.mount("/camping/static", StaticFiles(directory="static"), name="static")
-
-# 헬퍼: 홈 페이지 렌더링 (중복 방지)
-async def render_homepage(request: Request, message: str = ""):
+# --- FastAPI 엔드포인트 ---
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    """
+    루트 URL에 접속했을 때 현재 실행 횟수와 날짜 설정 페이지를 보여줍니다.
+    """
     current_dates = ", ".join(CHECK_DATES)
     return templates.TemplateResponse(
         "index.html",
@@ -138,18 +135,15 @@ async def render_homepage(request: Request, message: str = ""):
             "request": request,
             "execution_count": EXECUTION_COUNT,
             "current_dates": current_dates,
-            "monitoring_active": MONITORING_ACTIVE,
-            "message": message
+            "message": ""
         }
     )
 
-# --- API Endpoints (router under /camping/) ---
-@router.get("/", response_class=HTMLResponse, name="homepage")
-async def read_root(request: Request):
-    return await render_homepage(request)
-
-@router.post("/set-dates", name="set_dates")
+@app.post("/set-dates", response_class=HTMLResponse)
 async def set_dates(request: Request, dates: str = Form(...)):
+    """
+    POST 요청을 통해 새로운 감시 날짜를 설정합니다.
+    """
     global CHECK_DATES
     new_dates = [d.strip() for d in dates.split(',') if d.strip()]
     
@@ -160,9 +154,16 @@ async def set_dates(request: Request, dates: str = Form(...)):
     else:
         message = "올바른 날짜를 입력해주세요."
     
-    return RedirectResponse(request.url_for("homepage"), status_code=303)
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "execution_count": EXECUTION_COUNT,
+            "current_dates": ", ".join(CHECK_DATES),
+            "message": message
+        }
+    )
 
-<<<<<<< HEAD
 @app.post("/stop", response_class=HTMLResponse)
 async def stop_monitoring(request: Request):
     global MONITORING_ACTIVE, MONITORING_TASK
@@ -184,33 +185,24 @@ async def stop_monitoring(request: Request):
             "message": message
         }
     )
-=======
-@router.get("/status")
-async def get_status():
-    return {"monitoring_active": MONITORING_ACTIVE}
->>>>>>> 8cef732dcc989a6d3db05a4dfd225032f6442934
 
-@router.post("/toggle", name="toggle_monitoring")
-async def toggle_monitoring(request: Request):
+@app.post("/start", response_class=HTMLResponse)
+async def start_monitoring(request: Request):
     global MONITORING_ACTIVE, MONITORING_TASK
-    
-    MONITORING_ACTIVE = not MONITORING_ACTIVE
-    save_config(CHECK_DATES, MONITORING_ACTIVE)
-    
-    if MONITORING_ACTIVE:
-        print("[INFO] 감시가 시작되었습니다.")
-        if MONITORING_TASK is None or MONITORING_TASK.done():
-            MONITORING_TASK = asyncio.create_task(check_reservation_status())
+    if not MONITORING_ACTIVE:
+        MONITORING_ACTIVE = True
+        save_config(CHECK_DATES, MONITORING_ACTIVE)
+        MONITORING_TASK = asyncio.create_task(check_reservation_status())
+        message = "감시가 다시 시작되었습니다."
     else:
-        if MONITORING_TASK and not MONITORING_TASK.done():
-            print("[INFO] 감시 중단을 요청했습니다. 다음 확인 주기 이후에 중단됩니다.")
-
-    return RedirectResponse(request.url_for("homepage"), status_code=303)
-
-# --- Include Router under /camping ---
-app.include_router(router, prefix="/camping")
-
-# --- Root route: 직접 페이지 제공하여 리다이렉트 루프 방지 ---
-@app.get("/", response_class=HTMLResponse)
-async def root_alias(request: Request):
-    return await render_homepage(request)
+        message = "감시가 이미 실행 중입니다."
+    
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "execution_count": EXECUTION_COUNT,
+            "current_dates": ", ".join(CHECK_DATES),
+            "message": message
+        }
+    )
