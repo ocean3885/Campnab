@@ -39,25 +39,43 @@ async def check_availability(site_config: Dict[str, Any]) -> Dict[str, List[int]
     
     return found_sites
 
+async def cancellable_sleep(site_id: str, duration: int, monitoring_status: Dict[str, bool]):
+    """지정된 시간 동안 대기하지만, 1초마다 모니터링 상태를 확인하여 중단될 수 있도록 합니다."""
+    for _ in range(duration):
+        if not monitoring_status.get(site_id, False):
+            break
+        await asyncio.sleep(1)
+
 async def monitor_site(site_id: str, site_config: Dict[str, Any], monitoring_status: Dict[str, bool]):
     """특정 사이트의 모니터링을 수행하는 비동기 작업입니다."""
     check_interval = 120  # 2분
     alert_interval = 120  # 2분
 
     while monitoring_status.get(site_id, False):
-        found_sites = await check_availability(site_config)
-        
-        if found_sites:
-            log_status = f"예약 가능: {list(found_sites.keys())}"
-            display_name = site_config.get("display_name", site_id)
-            asyncio.create_task(send_sms_alert(f'{display_name}-예약가능'))
-            current_interval = alert_interval
-        else:
-            log_status = "예약 가능한 자리 없음."
-            current_interval = check_interval
+        try:
+            found_sites = await check_availability(site_config)
+            
+            if not monitoring_status.get(site_id, False):
+                break
 
-        print(f"[{site_id}] {log_status} (다음 확인: {current_interval}초 후)")
-        
-        await asyncio.sleep(current_interval)
+            if found_sites:
+                log_status = f"예약 가능: {list(found_sites.keys())}"
+                display_name = site_config.get("display_name", site_id)
+                asyncio.create_task(send_sms_alert(f'{display_name}-예약가능'))
+                current_interval = alert_interval
+            else:
+                log_status = "예약 가능한 자리 없음."
+                current_interval = check_interval
+
+            print(f"[{site_id}] {log_status} (다음 확인: {current_interval}초 후)")
+            
+            await cancellable_sleep(site_id, current_interval, monitoring_status)
+
+        except asyncio.CancelledError:
+            print(f"[INFO] {site_id} 모니터링 작업이 외부에서 취소되었습니다.")
+            break
+        except Exception as e:
+            print(f"[ERROR] {site_id} 모니터링 중 예외 발생: {e}")
+            await cancellable_sleep(site_id, check_interval, monitoring_status)
     
     print(f"[INFO] {site_id} 모니터링이 종료되었습니다.")
