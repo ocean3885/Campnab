@@ -18,7 +18,7 @@ def load_config():
             return json.load(f)
     return {
         "dates": ["20250815", "20250816"],  # 기본 날짜
-        "monitoring_active": True           # 기본 감시 상태
+        "monitoring_active": True            # 기본 감시 상태
     }
 
 def save_config(dates, monitoring_active):
@@ -65,7 +65,7 @@ async def check_reservation_status():
     check_interval = 120
     alert_interval = 3600
 
-    while MONITORING_ACTIVE:        
+    while MONITORING_ACTIVE:
         start_time = datetime.datetime.now()
         EXECUTION_COUNT += 1  # 실행 횟수 증가
         found_sites = {}
@@ -120,8 +120,6 @@ async def lifespan(app: FastAPI):
     yield
     print("Application is shutting down.")
 
-
-
 app = FastAPI(lifespan=lifespan)
 
 # --- FastAPI 엔드포인트 ---
@@ -168,10 +166,16 @@ async def set_dates(request: Request, dates: str = Form(...)):
 
 @app.post("/stop", response_class=HTMLResponse)
 async def stop_monitoring(request: Request):
-    global MONITORING_ACTIVE
-    MONITORING_ACTIVE = False
-    save_config(CHECK_DATES, MONITORING_ACTIVE)
-    message = "감시가 중단되었습니다."
+    global MONITORING_ACTIVE, MONITORING_TASK
+    if MONITORING_ACTIVE:
+        MONITORING_ACTIVE = False
+        if MONITORING_TASK:
+            MONITORING_TASK.cancel()
+        save_config(CHECK_DATES, MONITORING_ACTIVE)
+        message = "감시가 중단되었습니다."
+    else:
+        message = "감시가 이미 중단된 상태입니다."
+    
     return templates.TemplateResponse(
         "index.html",
         {
