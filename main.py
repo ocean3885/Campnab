@@ -17,8 +17,8 @@ def load_config():
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {
-        "dates": ["20250815", "20250816"],  # 기본 날짜
-        "monitoring_active": True            # 기본 감시 상태
+        "dates": ["20250815", "20250816"],
+        "monitoring_active": True
     }
 
 def save_config(dates, monitoring_active):
@@ -67,7 +67,7 @@ async def check_reservation_status():
 
     while MONITORING_ACTIVE:
         start_time = datetime.datetime.now()
-        EXECUTION_COUNT += 1  # 실행 횟수 증가
+        EXECUTION_COUNT += 1
         found_sites = {}
         log_status = "No available spots."
         
@@ -125,9 +125,6 @@ app = FastAPI(lifespan=lifespan)
 # --- FastAPI 엔드포인트 ---
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    """
-    루트 URL에 접속했을 때 현재 실행 횟수와 날짜 설정 페이지를 보여줍니다.
-    """
     current_dates = ", ".join(CHECK_DATES)
     return templates.TemplateResponse(
         "index.html",
@@ -135,16 +132,14 @@ async def read_root(request: Request):
             "request": request,
             "execution_count": EXECUTION_COUNT,
             "current_dates": current_dates,
-            "message": ""
+            "message": "",
+            "monitoring_active": MONITORING_ACTIVE
         }
     )
 
 @app.post("/set-dates", response_class=HTMLResponse)
 async def set_dates(request: Request, dates: str = Form(...)):
-    """
-    POST 요청을 통해 새로운 감시 날짜를 설정합니다.
-    """
-    global CHECK_DATES
+    global CHECK_DATES, MONITORING_ACTIVE
     new_dates = [d.strip() for d in dates.split(',') if d.strip()]
     
     if new_dates:
@@ -160,7 +155,8 @@ async def set_dates(request: Request, dates: str = Form(...)):
             "request": request,
             "execution_count": EXECUTION_COUNT,
             "current_dates": ", ".join(CHECK_DATES),
-            "message": message
+            "message": message,
+            "monitoring_active": MONITORING_ACTIVE
         }
     )
 
@@ -182,7 +178,8 @@ async def stop_monitoring(request: Request):
             "request": request,
             "execution_count": EXECUTION_COUNT,
             "current_dates": ", ".join(CHECK_DATES),
-            "message": message
+            "message": message,
+            "monitoring_active": MONITORING_ACTIVE
         }
     )
 
@@ -203,6 +200,7 @@ async def start_monitoring(request: Request):
             "request": request,
             "execution_count": EXECUTION_COUNT,
             "current_dates": ", ".join(CHECK_DATES),
-            "message": message
+            "message": message,
+            "monitoring_active": MONITORING_ACTIVE
         }
     )

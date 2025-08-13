@@ -1,37 +1,41 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>예약 감시 설정</title>
+    <title>예약 감시 설정</title>
 </head>
 <body>
-    <a href="/"><h1>예약 감시 설정</h1></a>
-    
-    <p>
-        <strong>현재 기준 실행 횟수:</strong> {{ execution_count }}회
-    </p>
+    <a href="/"><h1>예약 감시 설정</h1></a>
+    
+    <p>
+        <strong>현재 기준 실행 횟수:</strong> {{ execution_count }}회
+    </p>
 
-    <p>
-        <strong>현재 감시 날짜:</strong> {{ current_dates }}
-    </p>
+    <p>
+        <strong>현재 감시 날짜:</strong> {{ current_dates }}
+    </p>
 
-    {% if message %}
-    <p style="color: green;">{{ message }}</p>
-    {% endif %}
+    {% if message %}
+    <p style="color: green;">{{ message }}</p>
+    {% endif %}
 
-    <form action="/set-dates" method="post">
-        <h3>감시 날짜 변경</h3>
-        <label for="dates">새로운 감시 날짜 입력 (YYYYMMDD 형식, 쉼표로 구분):</label><br>
-        <input type="text" id="dates" name="dates" placeholder="예: 20250815, 20250816"><br><br>
-        <input type="submit" value="날짜 설정">
-    </form>
-    {% if monitoring_active %}
-        <form action="/stop" method="post" style="display:inline;">
-            <input type="submit" value="감시 중단">
-        </form>
-    {% else %}
-        <form action="/start" method="post" style="display:inline;">
-            <input type="submit" value="감시 시작">
-        </form>
-    {% endif %}
+    <form action="/set-dates" method="post">
+        <h3>감시 날짜 변경</h3>
+        <label for="dates">새로운 감시 날짜 입력 (YYYYMMDD 형식, 쉼표로 구분):</label><br>
+        <input type="text" id="dates" name="dates" placeholder="예: 20250815, 20250816"><br><br>
+        <input type="submit" value="날짜 설정">
+    </form>
+    
+    <div style="margin-top: 20px;">
+    {% if monitoring_active %}
+        <button disabled style="background-color: #f0f0f0; cursor: not-allowed;">감시 중</button>
+        <form action="/stop" method="post" style="display:inline;">
+            <input type="submit" value="감시 중단">
+        </form>
+    {% else %}
+        <form action="/start" method="post" style="display:inline;">
+            <input type="submit" value="감시 시작">
+        </form>
+    {% endif %}
+    </div>
 </body>
 </html>
